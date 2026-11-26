@@ -1,0 +1,24 @@
+{
+  "key": "PL-1101",
+  "cohort": "吊镀线",
+  "day": 2,
+  "received": 3,
+  "revision": 1,
+  "result_day": 5,
+  "outcome": 2.13886,
+  "observed": true,
+  "form": {
+    "整流电源": {
+      "bath_milliamperes": 190000,
+      "bath_seconds": 406
+    },
+    "挂具进槽": {
+      "ph_cent": 450,
+      "hanger_square_cm": 11500
+    },
+    "槽液抄表": {
+      "cartridge_hours": 624,
+      "liquid_deci_c": 430
+    }
+  }
+}
