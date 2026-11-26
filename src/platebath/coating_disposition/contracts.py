@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-POLICY_VERSION = 'platebath.20261125.v1'
+POLICY_VERSION = 'platebath.20261126.v1'
 
 
 @dataclass(frozen=True, slots=True)

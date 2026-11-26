@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Any
 
 MODEL_NAME = 'CART 槽位厚差回归'
-RISK_MODEL = False
+RISK_MODEL = True
 
 
 @dataclass(frozen=True, slots=True)

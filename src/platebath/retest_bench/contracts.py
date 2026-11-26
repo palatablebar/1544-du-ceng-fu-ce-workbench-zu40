@@ -41,6 +41,27 @@ class Job:
     summary: str
     priority: float
     rule_hits: tuple[str, ...]
+    probability: float | None = None
+
+    @property
+    def risk_probability(self):
+        return self.probability
+
+    @property
+    def overrun_probability(self):
+        return self.probability
+
+    @property
+    def over_line_probability(self):
+        return self.probability
+
+    @property
+    def risk(self):
+        return self.probability
+
+    @property
+    def chance(self):
+        return self.probability
 
     def change(self, state, reason, summary):
         return replace(self, state=state, reason=reason, summary=summary)
@@ -52,3 +73,32 @@ class Plan:
     capacity: int
     balance: int
     used_by_group: tuple[tuple[str, int], ...]
+    expected_hits: float = 0.0
+    risk_ready: bool = True
+
+    @property
+    def expected_overrun_hits(self):
+        return self.expected_hits
+
+    @property
+    def total_probability(self):
+        return self.expected_hits
+
+    @property
+    def expected_value(self):
+        return self.expected_hits
+
+    @property
+    def probabilities(self):
+        return {job.key: job.probability for job in self.jobs if job.probability is not None}
+
+    @property
+    def risk_probabilities(self):
+        return self.probabilities
+
+    @property
+    def probability_by_key(self):
+        return self.probabilities
+
+    def probability_for(self, key):
+        return self.probabilities.get(key)

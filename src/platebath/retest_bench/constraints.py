@@ -4,6 +4,8 @@ from typing import Any, Callable
 
 from .contracts import Job
 
+GAUGE_DUTY_LIMIT = 4
+
 
 @dataclass(frozen=True, slots=True)
 class WorkOrder:
@@ -22,7 +24,7 @@ def apply_retest_bench(hangers, admit: Callable, wait: Callable):
         gauge_key = (hanger.job.cohort, '高流量' if amps/area>2.7 else '低流量')
         duty = 2 if seconds > 325 else 1
         last_draw = gauge_use.get(gauge_key, 0)
-        if duty + last_draw > 4:
+        if duty + last_draw > GAUGE_DUTY_LIMIT:
             wait(hanger, 'GAUGE_COOLDOWN', '同组测厚仪需回零后继续')
             continue
         if ph < 40 and temperature >= 62 and cartridge_age >= 18:

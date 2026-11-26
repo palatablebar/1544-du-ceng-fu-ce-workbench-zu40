@@ -62,7 +62,19 @@ def rows_for(plan, scored, vectors):
         else:
             driver = ' · '.join(f'{amount:+.2f}' for amount in point.contributions)
         interval = ('–' if job.lower is None else f'{job.lower:.2f}–{job.upper:.2f}')
+        probability = None if job.probability is None else float(job.probability)
         order.append({'key': job.key, 'zone': job.cohort, 'estimate': job.estimate, 'interval': interval,
+                      'probability': probability,
+                      'risk': probability,
+                      'p': probability,
+                      'chance': probability,
+                      'risk_score': probability,
+                      'overrun_risk': probability,
+                      'risk_probability': probability,
+                      'overrun_probability': probability,
+                      'over_line_probability': probability,
+                      '超线概率': probability,
+                      'expected_overrun': probability,
                       'state': job.state, 'cost': job.cost, 'reason': job.reason, 'evidence': job.summary,
                       'drivers': driver, 'missing': len(point.missing), 'hits': list(job.rule_hits),
                       'measurements': dict(zip(('amps', 'time_sec', 'ph_tenth', 'area_dm', 'filter_days', 'bath_c'), point.input_values, strict=True)),
@@ -119,8 +131,15 @@ def execute(documents, capacity=12, mode='balanced', *, as_of=96):
         raise ValueError('需要 1 至 2500 份可识别单据')
     dossier = ShiftDossier(documents,as_of)
     fitted_calibration, estimates = dossier.grading()
+    risk_calibration = calibration_service.calibrate_overrun_risk(
+        estimates['calibration'], dispatch_service.RISK_CUTOFF
+    )
     evaluated, checked_live, drift = dossier.verification(estimates,fitted_calibration)
-    allocation = dispatch_service.plan_jobs(checked_live,drift.domain,capacity,mode)
+    checked_live = tuple(
+        replace(item, probability=risk_calibration.probability_for(item))
+        for item in checked_live
+    )
+    allocation = dispatch_service.plan_jobs(checked_live,drift.domain,capacity,mode,risk_calibration)
     closed = dossier.seal(allocation,mode)
     intake,windows,state,features,kernel = dossier.accepted,dossier.history,dossier.feature_stamp,dossier.prepared,dossier.forecaster
     scored = estimates['live']
@@ -139,6 +158,12 @@ def execute(documents, capacity=12, mode='balanced', *, as_of=96):
     operating_rows = dispatch_service.operating_ledger(row_list)
     overtime = calibration_service.boundary_diagnostics(evaluated, 2.3)
     sector = calibration_service.sector_replay(evaluated, 2.3)
+    risk_table = [{'校准预测厚差': None if row.predicted is None else round(row.predicted, 4),
+                   '该档实绩数': row.count,
+                   '超线概率': None if row.observed is None else round(row.observed, 4)}
+                  for row in risk_calibration.rows]
+    risk_table.append({'校准类别': '超线实绩', '单量': risk_calibration.positives})
+    risk_table.append({'校准类别': '未超线实绩', '单量': risk_calibration.negatives})
     operating_shift = monitor_service.shop_floor_shift(features.train, features.live)
     field_evidence = audit_service.sign_field_evidence(row_list, allocation)
     features_glance = feature_service.feature_evidence(state) + feature_service.measure_review(features)
@@ -149,15 +174,17 @@ def execute(documents, capacity=12, mode='balanced', *, as_of=96):
         stage_at(1, f'拟合 {len(windows.train)} 条，校准 {len(windows.calibration)} 条，回放 {len(windows.replay)} 条', cohort_service.window_evidence(windows) + cohort_service.readiness_evidence(windows, as_of)),
         stage_at(2, '特征转换版本 ' + state.fingerprint, features_glance),
         stage_at(3, kernel.name, weight_rows + model_service.inspection_rows(kernel, features) + comparison_rows(scored)),
-        stage_at(4, f'{fitted_calibration.method} · {performance.status} · {performance.count} 条回放实绩', calibration_service.calibration_evidence(performance) + [overtime] + sector),
+        stage_at(4, f'{fitted_calibration.method} · {performance.status} · {performance.count} 条回放实绩', calibration_service.calibration_evidence(performance) + risk_table + [overtime] + sector),
         stage_at(5, f'{drift.status} · {len(drift.domain)} 张单据需外推判读', monitor_service.shift_evidence(drift, coverage) + operating_shift),
         stage_at(6, f'本班占用 {allocation.capacity-allocation.balance} / {allocation.capacity} 个工位单位', dispatch_service.action_evidence(allocation) + dispatch_service.operating_group(checked_live, allocation)),
         stage_at(7, f'处置凭证 {closed.stamp} · 额度守恒', audit_service.reconciliation_evidence(closed) + field_evidence['执行业务单']),
     ]
     details[6]['operating_rows'] = operating_rows
     details[6]['operating_title'] = '挂件测厚安排'
+    details[6]['expected_overrun_hits'] = allocation.expected_hits
+    details[6]['risk_ready'] = allocation.risk_ready
     points = [{'label': row['key'], 'value': row['estimate'], 'state': row['state'], 'zone': row['zone'],
-               'upper': row['interval'], 'cost': row['cost']} for row in sorted(row_list, key=lambda row: row['key'])]
+               'upper': row['interval'], 'cost': row['cost'], 'probability': row['probability']} for row in sorted(row_list, key=lambda row: row['key'])]
     def estimate(vector):
         return calibration_service.check_point(model_service.predict_one(kernel, vector), fitted_calibration).estimate
 
@@ -173,6 +200,19 @@ def execute(documents, capacity=12, mode='balanced', *, as_of=96):
               'policy_hash': closed.policy_hash, 'feature_stamp': state.fingerprint,
               'model': kernel.name, 'run_id': closed.stamp, 'object_name': DISPLAY['object_name'],
               'unit': DISPLAY['unit'], 'sections': details, 'flow_counts': list(states.items()),
+              'expected_overrun_hits': allocation.expected_hits,
+              'expected_hits': allocation.expected_hits,
+              'risk_ready': allocation.risk_ready,
+              'risk_calibration': {
+                  'window': 'calibration', 'independent': True,
+                  'size': risk_calibration.size,
+                  'positive': risk_calibration.positives,
+                  'negative': risk_calibration.negatives,
+                  'ready': risk_calibration.ready,
+                  'threshold': risk_calibration.threshold,
+                  'rates': [{'predicted': row.predicted, 'probability': row.observed, 'count': row.count}
+                            for row in risk_calibration.rows],
+              },
               'measures': {'amps': ('槽电流', 'A'),
  'time_sec': ('浸镀历时', 's'),
  'ph_tenth': ('实测酸碱度', '0.1pH'),

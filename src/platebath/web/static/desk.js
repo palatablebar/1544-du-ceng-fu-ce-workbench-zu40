@@ -5,8 +5,8 @@ const code = document.body.dataset.endpoint;
 const endpoint = `/api/${code}`;
 const nav = [...document.querySelectorAll('[data-stage]')];
 let currentBatch = null;
-const order = {key:'单号',zone:'作业区',estimate:'估计',interval:'估计区间',state:'处置',cost:'用量',reason:'原因码',evidence:'处理依据',drivers:'主要影响项',missing:'缺测量',hits:'命中规则'};
-const visibleOrder = ['key','zone','estimate','state','cost'];
+const order = {key:'单号',zone:'作业区',estimate:'估计',probability:'超线概率',interval:'估计区间',state:'处置',cost:'用量',reason:'原因码',evidence:'处理依据',drivers:'主要影响项',missing:'缺测量',hits:'命中规则'};
+const visibleOrder = ['key','zone','estimate','probability','state','cost'];
 let ledger;
 let focus = 6;
 let currentItem;
@@ -53,6 +53,8 @@ function rowsTable(records, keys, options={}) {
                 const badge = node('span',value[key],'state');
                 badge.dataset.state = value[key];
                 cell.append(badge);
+            } else if (key === 'probability' && typeof value[key] === 'number') {
+                cell.textContent = `${(value[key] * 100).toFixed(1)}%`;
             } else cell.textContent = valueOf(value[key]);
         }
     }
@@ -106,7 +108,11 @@ function showDetail() {
         byId('detail-title').textContent = '单据详情';
         byId('detail-note').textContent = `${currentItem.key} · ${currentItem.zone}`;
         const details = node('dl',undefined,'record-fields');
-        Object.entries(order).forEach(([key,title]) => details.append(node('dt',title),node('dd',currentItem[key])));
+        Object.entries(order).forEach(([key,title]) => {
+            const raw = currentItem[key];
+            const shown = key === 'probability' && typeof raw === 'number' ? `${(raw * 100).toFixed(1)}%` : raw;
+            details.append(node('dt',title),node('dd',shown));
+        });
         card.append(details);
         const plan = ledger.sections.find(section => section.operating_rows);
         const fieldNotes = plan?.operating_rows.filter(item => item['关联单据'] === currentItem.key);
